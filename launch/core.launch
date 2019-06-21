@@ -1,0 +1,16 @@
+<launch>
+    <arg name="serial" default="1397"/>
+    <arg name="camera" default="camera"/>
+    <group ns="$(arg camera)">
+        <node name="structure_driver" pkg="structure_core" type="structure_driver" output="screen">
+            <param name="serial" value="$(arg serial)"/>
+            <param name="camera" value="$(arg camera)"/>
+        </node>
+        <node pkg="nodelet" type="nodelet" name="standalone_nodelet"  args="manager"/>
+        <node pkg="nodelet" type="nodelet" name="depth_image_proc" args="load depth_image_proc/point_cloud_xyzrgb standalone_nodelet" output="screen">
+            <remap from="rgb/camera_info" to="visible/camera_info"/>
+            <remap from="rgb/image_rect_color" to="visible/image_raw"/>
+            <remap from="depth_registered/image_rect" to="depth_aligned/image"/>
+        </node>
+    </group>
+</launch>

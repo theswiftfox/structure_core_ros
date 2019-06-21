@@ -36,6 +36,7 @@ class SessionDelegate : public ST::CaptureSessionDelegate {
         ros::Publisher right_image_pub_;
         ros::Publisher right_info_pub_;
 
+        std::string camera_name;
 
         sensor_msgs::ImagePtr imageFromDepthFrame(const std::string& frame_id, const ST::DepthFrame& f)
         {
@@ -183,7 +184,7 @@ class SessionDelegate : public ST::CaptureSessionDelegate {
             {
                 return;
             }
-            std::string depth_frame_id = "camera_depth_optical_frame";
+            std::string depth_frame_id = camera_name + "_depth_optical_frame";
             depth_image_pub_.publish(imageFromDepthFrame(depth_frame_id, f));
             depth_info_pub_.publish(infoFromFrame(depth_frame_id, f));
         }
@@ -194,7 +195,7 @@ class SessionDelegate : public ST::CaptureSessionDelegate {
             {
                 return;
             }
-            std::string visible_frame_id = "camera_visible_optical_frame";
+            std::string visible_frame_id = camera_name + "_visible_optical_frame";
             visible_image_pub_.publish(imageFromVisibleFrame(visible_frame_id, f));
             visible_info_pub_.publish(infoFromFrame(visible_frame_id, f));
         }
@@ -205,8 +206,8 @@ class SessionDelegate : public ST::CaptureSessionDelegate {
             {
                 return;
             }
-            std::string left_frame_id = "camera_left_optical_frame";
-            std::string right_frame_id = "camera_depth_optical_frame";
+            std::string left_frame_id = camera_name + "_left_optical_frame";
+            std::string right_frame_id = camera_name + "_depth_optical_frame";
 
             std::vector<sensor_msgs::ImagePtr> frames = imagesFromInfraredFrame(left_frame_id, right_frame_id, f, as_8bit);
             left_image_pub_.publish(frames[0]);
@@ -223,7 +224,7 @@ class SessionDelegate : public ST::CaptureSessionDelegate {
             }
 
             sensor_msgs::ImagePtr msg(new sensor_msgs::Image);
-            msg->header.frame_id = "camera_visible_optical_frame";
+            msg->header.frame_id = camera_name + "_visible_optical_frame";
             msg->header.stamp.fromSec(depth.timestamp());
             msg->encoding = "16UC1";
             msg->height = visual.height();
@@ -247,7 +248,7 @@ class SessionDelegate : public ST::CaptureSessionDelegate {
             }
 
             sensor_msgs::ImagePtr msg(new sensor_msgs::Image);
-            msg->header.frame_id = "camera_depth_optical_frame";
+            msg->header.frame_id = camera_name + "_depth_optical_frame";
             msg->header.stamp.fromSec(depth.timestamp());
             msg->encoding = "16UC1";
             msg->height = ir.height();
@@ -267,7 +268,7 @@ class SessionDelegate : public ST::CaptureSessionDelegate {
 
     public:
 
-        SessionDelegate(ros::NodeHandle& n, ros::NodeHandle& pnh)
+        SessionDelegate(ros::NodeHandle& n, ros::NodeHandle& pnh, std::string& camera)
         {
             ros::NodeHandle dn(n, "depth");
             depth_image_pub_ = dn.advertise<sensor_msgs::Image>("image", 10);
@@ -292,6 +293,8 @@ class SessionDelegate : public ST::CaptureSessionDelegate {
             ros::NodeHandle rn(n, "right");
             right_image_pub_ = rn.advertise<sensor_msgs::Image>("image_raw", 10);
             right_info_pub_ = rn.advertise<sensor_msgs::CameraInfo>("camera_info", 10);
+
+            camera_name = camera;
         }
 
         void captureSessionEventDidOccur(ST::CaptureSession *, ST::CaptureSessionEventId event) override {
@@ -374,6 +377,24 @@ int main(int argc, char **argv) {
 
     ros::NodeHandle pnh("~");
 
+    std::string camera_name;
+    pnh.param<std::string>("camera", camera_name, "camera");
+    ROS_INFO("camera name %s", camera_name.c_str());
+
+    int serial;
+    const char* serial_c;
+    pnh.param<int>("serial", serial, -1);
+    if (serial == -1)
+    {
+        ROS_INFO("No serial number set, looking for first sensor");
+        serial_c = nullptr;
+    }
+    else
+    {
+        ROS_INFO("Serial number: %d", serial);
+        serial_c = std::to_string(serial).c_str();
+    }
+
     ST::CaptureSessionSettings settings;
     settings.source = ST::CaptureSessionSourceId::StructureCore;
 
@@ -386,7 +407,7 @@ int main(int argc, char **argv) {
     /** @brief Set to true to enable depth streaming. */
     settings.structureCore.depthEnabled = true;
     /** @brief Set to true to enable infrared streaming. */
-    settings.structureCore.infraredEnabled = false;
+    settings.structureCore.infraredEnabled = true;
     /** @brief Set to true to enable visible streaming. */
     settings.structureCore.visibleEnabled = true;
     /** @brief Set to true to enable accelerometer streaming. */
@@ -414,7 +435,7 @@ int main(int argc, char **argv) {
     /** @brief The target stream rate for IMU data. (gyro and accel) */
     settings.structureCore.imuUpdateRate = ST::StructureCoreIMUUpdateRate::Default;
     /** @brief Serial number of sensor to stream. If null, the first connected sensor will be used. */
-    settings.structureCore.sensorSerial = nullptr;
+    settings.structureCore.sensorSerial = serial_c;
     /** @brief Maximum amount of time (in milliseconds) to wait for a sensor to connect before throwing a timeout error. */
     settings.structureCore.sensorInitializationTimeout = 6000;
     /** @brief The target framerate for the infrared camera. If the value is not supported, the default is 30. */
@@ -438,7 +459,7 @@ int main(int argc, char **argv) {
     /** @brief Laser projector power setting from 0.0 to 1.0 inclusive. Projector will only activate if required by streaming configuration. */
     settings.structureCore.initialProjectorPower = 1.0f;
 
-    SessionDelegate delegate(n, pnh);
+    SessionDelegate delegate(n, pnh, camera_name);
     ST::CaptureSession session;
     session.setDelegate(&delegate);
     if (!session.startMonitoring(settings)) {

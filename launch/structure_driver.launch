@@ -1,0 +1,6 @@
+<launch>
+    <arg name="serial" default="1397"/>
+    <node name="structure_driver" pkg="structure_core" type="structure_driver" output="screen">
+        <param name="serial" value="$(arg serial)"/>
+    </node>
+</launch>
