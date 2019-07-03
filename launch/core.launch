@@ -1,6 +1,7 @@
 <launch>
     <arg name="serial" default="1397"/>
     <arg name="camera" default="camera"/>
+    <arg name="publish_tf" default="true" />
     <group ns="$(arg camera)">
         <node name="structure_driver" pkg="structure_core" type="structure_driver" output="screen">
             <param name="serial" value="$(arg serial)"/>
@@ -11,6 +12,11 @@
             <remap from="rgb/camera_info" to="visible/camera_info"/>
             <remap from="rgb/image_rect_color" to="visible/image_raw"/>
             <remap from="depth_registered/image_rect" to="depth_aligned/image"/>
+            <remap from="depth_registered/points" to="depth/points"/>
         </node>
     </group>
+    <include if="$(arg publish_tf)"
+             file="$(find rgbd_launch)/launch/kinect_frames.launch">
+        <arg name="camera" value="$(arg camera)" />
+    </include>
 </launch>

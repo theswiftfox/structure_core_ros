@@ -43,7 +43,7 @@ class SessionDelegate : public ST::CaptureSessionDelegate {
             sensor_msgs::ImagePtr msg(new sensor_msgs::Image);
 
             msg->header.frame_id = frame_id;
-            msg->header.stamp.fromSec(f.timestamp());
+            msg->header.stamp = ros::Time::now();
 
             msg->encoding = "16UC1";
             msg->height = f.height();
@@ -72,7 +72,7 @@ class SessionDelegate : public ST::CaptureSessionDelegate {
         {
           sensor_msgs::CameraInfoPtr info(new sensor_msgs::CameraInfo);
           info->header.frame_id = frame_id;
-          info->header.stamp.fromSec(f.timestamp());
+          info->header.stamp = ros::Time::now();
           info->height = f.intrinsics().height;
           info->width = f.intrinsics().width/width_scale;
           info->distortion_model = "plumb_bob";
@@ -95,7 +95,7 @@ class SessionDelegate : public ST::CaptureSessionDelegate {
             sensor_msgs::ImagePtr msg(new sensor_msgs::Image);
 
             msg->header.frame_id = frame_id;
-            msg->header.stamp.fromSec(f.timestamp());
+            msg->header.stamp = ros::Time::now();
 
             int num_channels = f.rgbSize()/(f.width()*f.height());
 
@@ -123,7 +123,7 @@ class SessionDelegate : public ST::CaptureSessionDelegate {
 
             sensor_msgs::ImagePtr right(new sensor_msgs::Image);
             right->header.frame_id = right_frame_id;
-            right->header.stamp.fromSec(f.timestamp());
+            right->header.stamp = ros::Time::now();
 
             right->encoding = "mono16";
             right->height = f.height();
@@ -135,7 +135,7 @@ class SessionDelegate : public ST::CaptureSessionDelegate {
 
             sensor_msgs::ImagePtr left(new sensor_msgs::Image);
             left->header.frame_id = left_frame_id;
-            left->header.stamp.fromSec(f.timestamp());
+            left->header.stamp = ros::Time::now();
 
             left->encoding = "mono16";
             left->height = f.height();
@@ -195,7 +195,7 @@ class SessionDelegate : public ST::CaptureSessionDelegate {
             {
                 return;
             }
-            std::string visible_frame_id = camera_name + "_visible_optical_frame";
+            std::string visible_frame_id = camera_name + "_rgb_optical_frame";
             visible_image_pub_.publish(imageFromVisibleFrame(visible_frame_id, f));
             visible_info_pub_.publish(infoFromFrame(visible_frame_id, f));
         }
@@ -224,8 +224,8 @@ class SessionDelegate : public ST::CaptureSessionDelegate {
             }
 
             sensor_msgs::ImagePtr msg(new sensor_msgs::Image);
-            msg->header.frame_id = camera_name + "_visible_optical_frame";
-            msg->header.stamp.fromSec(depth.timestamp());
+            msg->header.frame_id = camera_name + "_rgb_optical_frame";
+            msg->header.stamp = ros::Time::now();
             msg->encoding = "16UC1";
             msg->height = visual.height();
             msg->width = visual.width();
@@ -249,7 +249,7 @@ class SessionDelegate : public ST::CaptureSessionDelegate {
 
             sensor_msgs::ImagePtr msg(new sensor_msgs::Image);
             msg->header.frame_id = camera_name + "_depth_optical_frame";
-            msg->header.stamp.fromSec(depth.timestamp());
+            msg->header.stamp = ros::Time::now();
             msg->encoding = "16UC1";
             msg->height = ir.height();
             msg->width = ir.width()/2;
@@ -417,7 +417,7 @@ int main(int argc, char **argv) {
     /** @brief The target resolution for streamed depth frames. @see StructureCoreDepthResolution */
     settings.structureCore.depthResolution = ST::StructureCoreDepthResolution::_640x480;
     /** @brief The preset depth range mode for streamed depth frames. Modifies the min/max range of the depth values. */
-    settings.structureCore.depthRangeMode = ST::StructureCoreDepthRangeMode::Medium;
+    settings.structureCore.depthRangeMode = ST::StructureCoreDepthRangeMode::Default;
     /** @brief The target resolution for streamed depth frames. @see StructureCoreInfraredResolution
         Non-default infrared and visible resolutions are currently unavailable.
     */
