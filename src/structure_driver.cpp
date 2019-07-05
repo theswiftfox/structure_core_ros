@@ -8,6 +8,8 @@
 
 #include <ros/ros.h>
 
+#include <std_msgs/Bool.h>
+
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/CameraInfo.h>
 #include <sensor_msgs/fill_image.h>
@@ -35,6 +37,11 @@ class SessionDelegate : public ST::CaptureSessionDelegate {
         ros::Publisher left_info_pub_;
         ros::Publisher right_image_pub_;
         ros::Publisher right_info_pub_;
+
+        bool projector_flag;
+        bool reboot_flag;
+
+        ros::Subscriber switch_projector_sub;
 
         std::string camera_name;
 
@@ -294,7 +301,32 @@ class SessionDelegate : public ST::CaptureSessionDelegate {
             right_image_pub_ = rn.advertise<sensor_msgs::Image>("image_raw", 10);
             right_info_pub_ = rn.advertise<sensor_msgs::CameraInfo>("camera_info", 10);
 
+            switch_projector_sub = n.subscribe("switch_projector", 1, &SessionDelegate::switchProjectorCallback, this);
+            reboot_flag = false;
+            projector_flag = true;
+
             camera_name = camera;
+        }
+
+        void switchProjectorCallback(const std_msgs::Bool::ConstPtr& msg)
+        {
+            projector_flag = msg->data;
+            reboot_flag = true;
+        }
+
+        bool getRebootFlag()
+        {
+            return reboot_flag;
+        }
+
+        bool getProjectFlag()
+        {
+            return projector_flag;
+        }
+
+        void resetRebootFlag()
+        {
+            reboot_flag = false;
         }
 
         void captureSessionEventDidOccur(ST::CaptureSession *, ST::CaptureSessionEventId event) override {
@@ -471,8 +503,31 @@ int main(int argc, char **argv) {
     delegate.waitUntilReady();
     session.startStreaming();
 
-    ros::spin();
+    while(ros::ok())
+    {
+        if (delegate.getRebootFlag())
+        {
+            if (delegate.getProjectFlag())
+            {
+                settings.structureCore.initialProjectorPower = 1.0f;
+            }
+            else
+            {
+                settings.structureCore.initialProjectorPower = 0.0f;
+            }
+            delegate.resetRebootFlag();
+            session.stopStreaming();
+            if (!session.startMonitoring(settings)) {
+                printf("Failed to initialize capture session\n");
+                return 1;
+            }
 
+            printf("Waiting for session to become ready...\n");
+            delegate.waitUntilReady();
+            session.startStreaming();
+        }
+        ros::spinOnce();
+    }
     session.stopStreaming();
     return 0;
 }
