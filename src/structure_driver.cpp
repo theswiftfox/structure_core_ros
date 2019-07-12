@@ -38,6 +38,9 @@ class SessionDelegate : public ST::CaptureSessionDelegate {
         ros::Publisher right_image_pub_;
         ros::Publisher right_info_pub_;
 
+        ros::Publisher ir_color_aligned_image_pub_;
+        ros::Publisher ir_color_aligned_info_pub_;
+
         bool projector_flag;
         bool reboot_flag;
 
@@ -272,6 +275,27 @@ class SessionDelegate : public ST::CaptureSessionDelegate {
             depth_ir_aligned_info_pub_.publish(info);
         }
 
+        void publishIRRGBAligned(const ST::InfraredFrame& ir, const ST::ColorFrame& visual)
+        {
+            if(not ir.isValid() or not visual.isValid() or ir_color_aligned_image_pub_.getNumSubscribers() == 0){
+                return;
+            }
+            sensor_msgs::ImagePtr msg(new sensor_msgs::Image);
+            msg->header.frame_id = camera_name + "_rgb_optical_frame";
+            msg->header.stamp = ros::Time::now();
+            msg->encoding = "mono16";
+            msg->height = visual.height();
+            msg->width = visual.width();
+            msg->step = 2*visual.width();
+            msg->is_bigendian = 0;
+
+            register_convert(ir, visual, msg->data);
+            auto info = infoFromFrame(msg->header.frame_id, visual);
+            info->header.stamp = msg->header.stamp;
+            ir_color_aligned_image_pub_.publish(msg);
+            ir_color_aligned_info_pub_.publish(info);
+        }
+
 
     public:
 
@@ -300,6 +324,10 @@ class SessionDelegate : public ST::CaptureSessionDelegate {
             ros::NodeHandle rn(n, "right");
             right_image_pub_ = rn.advertise<sensor_msgs::Image>("image_raw", 10);
             right_info_pub_ = rn.advertise<sensor_msgs::CameraInfo>("camera_info", 10);
+
+            ros::NodeHandle ia(n, "ir_visible_aligned");
+            ir_color_aligned_image_pub_ = ia.advertise<sensor_msgs::Image>("image_raw", 10);
+            ir_color_aligned_info_pub_ = ia.advertise<sensor_msgs::CameraInfo>("camera_info", 10);
 
             switch_projector_sub = n.subscribe("switch_projector", 1, &SessionDelegate::switchProjectorCallback, this);
             reboot_flag = false;
@@ -370,11 +398,13 @@ class SessionDelegate : public ST::CaptureSessionDelegate {
 
                         publishVisibleFrame(sample.visibleFrame);
 
-                        publishInfraredFrame(sample.infraredFrame, true);
+//                        publishInfraredFrame(sample.infraredFrame, true);
 
                         publishDepthAligned(sample.depthFrame, sample.visibleFrame);
 
-                        publishDepthIRAligned(sample.depthFrame, sample.infraredFrame);
+//                        publishDepthIRAligned(sample.depthFrame, sample.infraredFrame);
+
+                        publishIRRGBAligned(sample.infraredFrame, sample.visibleFrame);
                     }
                     break;
                 case ST::CaptureSessionSample::Type::AccelerometerEvent:
@@ -463,7 +493,7 @@ int main(int argc, char **argv) {
     /** @brief Enable auto-exposure for infrared frames. */
     settings.structureCore.infraredAutoExposureEnabled = true;
     /** @brief Specifies how to stream the infrared frames. @see StructureCoreInfraredMode */
-    settings.structureCore.infraredMode = ST::StructureCoreInfraredMode::BothCameras;
+    settings.structureCore.infraredMode = ST::StructureCoreInfraredMode::RightCameraOnly;
     /** @brief The target stream rate for IMU data. (gyro and accel) */
     settings.structureCore.imuUpdateRate = ST::StructureCoreIMUUpdateRate::Default;
     /** @brief Serial number of sensor to stream. If null, the first connected sensor will be used. */

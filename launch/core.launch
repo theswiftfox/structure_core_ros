@@ -6,6 +6,7 @@
         <node name="structure_driver" pkg="structure_core" type="structure_driver" output="screen">
             <param name="serial" value="$(arg serial)"/>
             <param name="camera" value="$(arg camera)"/>
+            <remap from="ir_visible_aligned/image_raw" to="ir/image"/>
         </node>
         <node pkg="nodelet" type="nodelet" name="standalone_nodelet"  args="manager"/>
         <node pkg="nodelet" type="nodelet" name="depth_image_proc" args="load depth_image_proc/point_cloud_xyzrgb standalone_nodelet" output="screen">
