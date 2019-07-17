@@ -195,8 +195,11 @@ class SessionDelegate : public ST::CaptureSessionDelegate {
                 return;
             }
             std::string depth_frame_id = camera_name + "_depth_optical_frame";
-            depth_image_pub_.publish(imageFromDepthFrame(depth_frame_id, f));
-            depth_info_pub_.publish(infoFromFrame(depth_frame_id, f));
+            sensor_msgs::ImagePtr msg = imageFromDepthFrame(depth_frame_id, f);
+            auto info = infoFromFrame(depth_frame_id, f);
+            info->header.stamp = msg->header.stamp;
+            depth_image_pub_.publish(msg);
+            depth_info_pub_.publish(info);
         }
 
         void publishVisibleFrame(const ST::ColorFrame& f)

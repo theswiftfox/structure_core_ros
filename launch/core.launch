@@ -9,11 +9,16 @@
             <remap from="ir_visible_aligned/image_raw" to="ir/image"/>
         </node>
         <node pkg="nodelet" type="nodelet" name="standalone_nodelet"  args="manager"/>
-        <node pkg="nodelet" type="nodelet" name="depth_image_proc" args="load depth_image_proc/point_cloud_xyzrgb standalone_nodelet" output="screen">
-            <remap from="rgb/camera_info" to="visible/camera_info"/>
-            <remap from="rgb/image_rect_color" to="visible/image_raw"/>
-            <remap from="depth_registered/image_rect" to="depth_aligned/image"/>
-            <remap from="depth_registered/points" to="depth/points"/>
+<!--        <node pkg="nodelet" type="nodelet" name="depth_image_proc" args="load depth_image_proc/point_cloud_xyzrgb standalone_nodelet" output="screen">-->
+<!--            <remap from="rgb/camera_info" to="visible/camera_info"/>-->
+<!--            <remap from="rgb/image_rect_color" to="visible/image_raw"/>-->
+<!--            <remap from="depth_registered/image_rect" to="depth_aligned/image"/>-->
+<!--            <remap from="depth_registered/points" to="depth/points"/>-->
+<!--        </node>-->
+        <node pkg="nodelet" type="nodelet" name="depth_image_proc" args="load depth_image_proc/point_cloud_xyz standalone_nodelet" output="screen">
+            <remap from="camera_info" to="depth/camera_info"/>
+            <remap from="image_rect" to="depth/image"/>
+            <remap from="points" to="depth/points"/>
         </node>
     </group>
     <include if="$(arg publish_tf)"
