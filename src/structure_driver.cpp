@@ -13,6 +13,7 @@
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/CameraInfo.h>
 #include <sensor_msgs/fill_image.h>
+#include <camera_info_manager/camera_info_manager.h>
 
 class SessionDelegate : public ST::CaptureSessionDelegate {
     private:
@@ -47,6 +48,9 @@ class SessionDelegate : public ST::CaptureSessionDelegate {
         ros::Subscriber switch_projector_sub;
 
         std::string camera_name;
+
+        camera_info_manager::CameraInfoManager *rgb_cinfo_;
+        bool info_loded;
 
         sensor_msgs::ImagePtr imageFromDepthFrame(const std::string& frame_id, const ST::DepthFrame& f)
         {
@@ -207,7 +211,11 @@ class SessionDelegate : public ST::CaptureSessionDelegate {
             }
             std::string visible_frame_id = camera_name + "_rgb_optical_frame";
             visible_image_pub_.publish(imageFromVisibleFrame(visible_frame_id, f));
-            visible_info_pub_.publish(infoFromFrame(visible_frame_id, f));
+            if (! info_loded) {
+                rgb_cinfo_->setCameraInfo(*infoFromFrame(visible_frame_id, f));
+            }
+//            visible_info_pub_.publish(infoFromFrame(visible_frame_id, f));
+            visible_info_pub_.publish(rgb_cinfo_->getCameraInfo());
         }
 
         void publishInfraredFrame(const ST::InfraredFrame& f, bool as_8bit=false)
@@ -334,6 +342,17 @@ class SessionDelegate : public ST::CaptureSessionDelegate {
             projector_flag = true;
 
             camera_name = camera;
+
+            rgb_cinfo_ = new camera_info_manager::CameraInfoManager(n);
+            if (!rgb_cinfo_->setCameraName(camera))
+            {
+                // GUID is 16 hex digits, which should be valid.
+                // If not, use it for log messages anyway.
+                ROS_WARN_STREAM("[" << camera
+                                    << "] name not valid"
+                                    << " for camera_info_manger");
+            }
+            info_loded = false;
         }
 
         void switchProjectorCallback(const std_msgs::Bool::ConstPtr& msg)
@@ -355,6 +374,15 @@ class SessionDelegate : public ST::CaptureSessionDelegate {
         void resetRebootFlag()
         {
             reboot_flag = false;
+        }
+
+        void loadCameraInfo(const std::string &url)
+        {
+            if (rgb_cinfo_->validateURL(url))
+            {
+                rgb_cinfo_->loadCameraInfo(url);
+                info_loded = true;
+            }
         }
 
         void captureSessionEventDidOccur(ST::CaptureSession *, ST::CaptureSessionEventId event) override {
@@ -443,6 +471,10 @@ int main(int argc, char **argv) {
     pnh.param<std::string>("camera", camera_name, "camera");
     ROS_INFO("camera name %s", camera_name.c_str());
 
+    std::string info_url;
+    pnh.param<std::string>("info_url", info_url, "file://${ROS_HOME}/camera_info/${NAME}.yaml");
+    ROS_INFO("info url %s", info_url.c_str());
+
     int serial;
     const char* serial_c;
     pnh.param<int>("serial", serial, -1);
@@ -522,6 +554,7 @@ int main(int argc, char **argv) {
     settings.structureCore.initialProjectorPower = 1.0f;
 
     SessionDelegate delegate(n, pnh, camera_name);
+    delegate.loadCameraInfo(info_url);
     ST::CaptureSession session;
     session.setDelegate(&delegate);
     if (!session.startMonitoring(settings)) {
