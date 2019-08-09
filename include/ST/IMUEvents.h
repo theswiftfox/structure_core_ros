@@ -21,13 +21,13 @@ namespace ST {
 /** @brief Raw 3-axis accelerometer sample data. */
 struct ST_API Acceleration
 {
-    /** X-axis acceleration (m/s) */
+    /** X-axis acceleration (g) */
     double x = NAN;
 
-    /** Y-axis acceleration (m/s) */
+    /** Y-axis acceleration (g) */
     double y = NAN;
 
-    /** Z-axis acceleration (m/s) */
+    /** Z-axis acceleration (g) */
     double z = NAN;
 };
 
@@ -61,12 +61,15 @@ struct ST_API AccelerometerEvent
     /** @brief Return the timestamp at which the accelerometer event was received by the host, in seconds relative to an unspecified epoch. */
     double arrivalTimestamp() const;
 
-    /** @brief Return the raw 3-axis accelerometer data in meters per second. */
+    /** @brief Return the raw 3-axis accelerometer data in g. */
     Acceleration acceleration() const;
 
     /** @brief Return the temperature of the accelerometer unit. */
     double temperature() const;
 
+
+    /** @brief Sets the per axis maximum value the imu will measure. */
+    void setSaturationThreshold(double threshold);
 
     /** @brief Sets the raw accelerometer event data. */
     void setAccelEvent(double x, double y, double z, double timestamp, const char* deviceID, double arrivalTimestamp = NAN);
@@ -85,9 +88,12 @@ struct ST_API GyroscopeEvent
     /** @brief Returns the generation timestamp of the gyroscope event, in seconds. */
     double timestamp() const;
 
-    /** @brief Return the raw 3-axis (Euler angles) gyroscope data in radians per second. */
+    /** @brief Return the raw 3-axis (rotation vector, i.e. angle-axis) gyroscope data in radians per second. */
     RotationRate rotationRate() const;
 
+
+    /** @brief Sets the per axis maximum value the imu will measure. */
+    void setSaturationThreshold(double threshold);
 
     /** @brief Sets the raw gyroscope event data. */
     void setGyroEvent(double x, double y, double z, double timestamp, const char* deviceID);

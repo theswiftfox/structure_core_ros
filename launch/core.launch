@@ -1,7 +1,7 @@
 <launch>
     <arg name="serial" default="1397"/>
     <arg name="camera" default="camera"/>
-    <arg name="publish_tf" default="true" />
+    <arg name="publish_tf" default="false" />
     <group ns="$(arg camera)">
         <node name="structure_driver" pkg="structure_core" type="structure_driver" output="screen">
             <param name="serial" value="$(arg serial)"/>

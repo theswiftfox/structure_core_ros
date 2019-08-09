@@ -37,6 +37,7 @@
 
 #include <Eigen/Geometry>
 #include <ST/CaptureSession.h>
+#include <vector>
 
 void register_convert(const ST::InfraredFrame& ir_frame, const ST::ColorFrame& color_frame, std::vector<uint8_t>& output)
 {

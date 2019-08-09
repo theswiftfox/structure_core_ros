@@ -11,6 +11,7 @@
 #include <std_msgs/Bool.h>
 
 #include <sensor_msgs/Image.h>
+#include <sensor_msgs/Imu.h>
 #include <sensor_msgs/CameraInfo.h>
 #include <sensor_msgs/fill_image.h>
 
@@ -40,6 +41,15 @@ class SessionDelegate : public ST::CaptureSessionDelegate {
 
         ros::Publisher ir_color_aligned_image_pub_;
         ros::Publisher ir_color_aligned_info_pub_;
+
+        ros::Publisher imu_combined_pub_;
+        ros::Publisher imu_accel_pub_;
+        ros::Publisher imu_gyro_pub_;
+
+        bool new_gyro_data;
+        ST::GyroscopeEvent gyro_last_event;
+
+        bool combined_imu = true;
 
         bool projector_flag;
         bool reboot_flag;
@@ -188,31 +198,52 @@ class SessionDelegate : public ST::CaptureSessionDelegate {
             return {left, right};
         }
 
+        void setAccelerometerData(const ST::AccelerometerEvent& e, sensor_msgs::Imu& imu_msg) {
+            const auto accel_data = e.acceleration();
+            imu_msg.linear_acceleration.x = accel_data.x;
+            imu_msg.linear_acceleration.y = accel_data.y;
+            imu_msg.linear_acceleration.z = accel_data.z;
+        }
+
+        void setGyroscopeData(const ST::GyroscopeEvent& e, sensor_msgs::Imu& imu_msg) {
+            const auto gyro_data = e.rotationRate();
+            imu_msg.angular_velocity.x = gyro_data.x;
+            imu_msg.angular_velocity.y = gyro_data.y;
+            imu_msg.angular_velocity.z = gyro_data.z;
+        }
+
         void publishDepthFrame(const ST::DepthFrame& f)
         {
-            if(not f.isValid() or depth_image_pub_.getNumSubscribers() == 0)
-            {
-                return;
+            if(f.isValid())
+            { 
+                std::string depth_frame_id = camera_name + "_depth_optical_frame";
+                if (depth_info_pub_.getNumSubscribers() > 0) {
+                    depth_info_pub_.publish(infoFromFrame(depth_frame_id, f));
+                }
+                if (depth_image_pub_.getNumSubscribers() > 0) {
+                    depth_image_pub_.publish(imageFromDepthFrame(depth_frame_id, f));
+                }
             }
-            std::string depth_frame_id = camera_name + "_depth_optical_frame";
-            depth_image_pub_.publish(imageFromDepthFrame(depth_frame_id, f));
-            depth_info_pub_.publish(infoFromFrame(depth_frame_id, f));
         }
 
         void publishVisibleFrame(const ST::ColorFrame& f)
         {
-            if(not f.isValid() or visible_image_pub_.getNumSubscribers() == 0)
+            if(f.isValid())
             {
-                return;
+                std::string visible_frame_id = camera_name + "_rgb_optical_frame";
+                if (visible_image_pub_.getNumSubscribers() > 0) {
+                    visible_image_pub_.publish(imageFromVisibleFrame(visible_frame_id, f));
+                }
+                if (visible_info_pub_.getNumSubscribers() > 0) {
+                    visible_info_pub_.publish(infoFromFrame(visible_frame_id, f));
+                }
             }
-            std::string visible_frame_id = camera_name + "_rgb_optical_frame";
-            visible_image_pub_.publish(imageFromVisibleFrame(visible_frame_id, f));
-            visible_info_pub_.publish(infoFromFrame(visible_frame_id, f));
+            
         }
 
         void publishInfraredFrame(const ST::InfraredFrame& f, bool as_8bit=false)
         {
-            if(not f.isValid()) //  or (left_image_pub_.getNumSubscribers() == 0 and right_image_pub_.getNumSubscribers() == 0)
+            if(!f.isValid()) //  || (left_image_pub_.getNumSubscribers() == 0 && right_image_pub_.getNumSubscribers() == 0)
             {
                 return;
             }
@@ -220,16 +251,26 @@ class SessionDelegate : public ST::CaptureSessionDelegate {
             std::string right_frame_id = camera_name + "_depth_optical_frame";
 
             std::vector<sensor_msgs::ImagePtr> frames = imagesFromInfraredFrame(left_frame_id, right_frame_id, f, as_8bit);
-            left_image_pub_.publish(frames[0]);
-            left_info_pub_.publish(infoFromFrame(left_frame_id, f, 2));
 
-            right_image_pub_.publish(frames[1]);
-            right_info_pub_.publish(infoFromFrame(right_frame_id, f, 2));
+            if (left_image_pub_.getNumSubscribers() > 0) {
+                left_image_pub_.publish(frames[0]);
+            }
+            if (left_info_pub_.getNumSubscribers() > 0) {
+                left_info_pub_.publish(infoFromFrame(left_frame_id, f, 2));
+            }
+
+            if (right_image_pub_.getNumSubscribers() > 0) {
+                right_image_pub_.publish(frames[1]);
+            }
+            if (right_info_pub_.getNumSubscribers() > 0) {
+                right_info_pub_.publish(infoFromFrame(right_frame_id, f, 2));
+            }
         }
 
         void publishDepthAligned(const ST::DepthFrame& depth, const ST::ColorFrame& visual)
         {
-            if(not depth.isValid() or not visual.isValid() or depth_color_aligned_pub_.getNumSubscribers() == 0){
+            if(!depth.isValid() || !visual.isValid() || 
+              (depth_color_aligned_pub_.getNumSubscribers() == 0 && depth_color_aligned_info_pub_.getNumSubscribers() == 0)) {
                 return;
             }
 
@@ -247,13 +288,14 @@ class SessionDelegate : public ST::CaptureSessionDelegate {
             auto info = infoFromFrame(msg->header.frame_id, visual);
             info->header.stamp = msg->header.stamp;
 
+
             depth_color_aligned_pub_.publish(msg);
             depth_color_aligned_info_pub_.publish(info);
         }
 
         void publishDepthIRAligned(const ST::DepthFrame& depth, const ST::InfraredFrame& ir)
         {
-            if(not depth.isValid() or not ir.isValid() or depth_ir_aligned_pub_.getNumSubscribers() == 0){
+            if(!depth.isValid() || !ir.isValid() || depth_ir_aligned_pub_.getNumSubscribers() == 0){
                 return;
             }
 
@@ -277,7 +319,7 @@ class SessionDelegate : public ST::CaptureSessionDelegate {
 
         void publishIRRGBAligned(const ST::InfraredFrame& ir, const ST::ColorFrame& visual)
         {
-            if(not ir.isValid() or not visual.isValid() or ir_color_aligned_image_pub_.getNumSubscribers() == 0){
+            if(!ir.isValid() || !visual.isValid() || ir_color_aligned_image_pub_.getNumSubscribers() == 0){
                 return;
             }
             sensor_msgs::ImagePtr msg(new sensor_msgs::Image);
@@ -296,6 +338,33 @@ class SessionDelegate : public ST::CaptureSessionDelegate {
             ir_color_aligned_info_pub_.publish(info);
         }
 
+        void publishIMUCombined(const ST::AccelerometerEvent& ae, const ST::GyroscopeEvent& ge) {
+            if (imu_combined_pub_.getNumSubscribers() == 0) return;
+            sensor_msgs::Imu imu_msg;
+            imu_msg.header.stamp.fromSec(ae.timestamp());
+            setAccelerometerData(ae, imu_msg);
+            setGyroscopeData(ge, imu_msg);
+
+            imu_combined_pub_.publish(imu_msg);
+        }
+
+        void publishIMUAccel(const ST::AccelerometerEvent& ae) {
+            if (imu_accel_pub_.getNumSubscribers() == 0) return;
+            sensor_msgs::Imu imu_msg;
+            imu_msg.header.stamp.fromSec(ae.timestamp());
+            setAccelerometerData(ae, imu_msg);
+
+            imu_accel_pub_.publish(imu_msg);
+        }
+
+        void publishIMUGyro(const ST::GyroscopeEvent& ge) {
+            if (imu_gyro_pub_.getNumSubscribers() == 0) return;
+            sensor_msgs::Imu imu_msg;
+            imu_msg.header.stamp.fromSec(ge.timestamp());
+            setGyroscopeData(ge, imu_msg);
+
+            imu_gyro_pub_.publish(imu_msg);
+        }
 
     public:
 
@@ -329,6 +398,14 @@ class SessionDelegate : public ST::CaptureSessionDelegate {
             ir_color_aligned_image_pub_ = ia.advertise<sensor_msgs::Image>("image_raw", 10);
             ir_color_aligned_info_pub_ = ia.advertise<sensor_msgs::CameraInfo>("camera_info", 10);
 
+            ros::NodeHandle imu(n, "imu");
+            if (combined_imu) {
+                imu_combined_pub_ = imu.advertise<sensor_msgs::Imu>("combined", 10);
+            } else {
+                imu_accel_pub_ = imu.advertise<sensor_msgs::Imu>("accel", 10);
+                imu_gyro_pub_ = imu.advertise<sensor_msgs::Imu>("gyro", 10);
+            }
+
             switch_projector_sub = n.subscribe("switch_projector", 1, &SessionDelegate::switchProjectorCallback, this);
             reboot_flag = false;
             projector_flag = true;
@@ -358,7 +435,7 @@ class SessionDelegate : public ST::CaptureSessionDelegate {
         }
 
         void captureSessionEventDidOccur(ST::CaptureSession *, ST::CaptureSessionEventId event) override {
-            printf("Received capture session event %d (%s)\n", (int)event, ST::CaptureSessionSample::toString(event));
+            std::cout << "Received capture session event " << (int)event << " " << ST::CaptureSessionSample::toString(event) << std::endl;
             switch (event) {
                 case ST::CaptureSessionEventId::Ready: {
                     std::unique_lock<std::mutex> u(lock);
@@ -373,7 +450,7 @@ class SessionDelegate : public ST::CaptureSessionDelegate {
                     cond.notify_all();
                 } break;
                 default:
-                    printf("Event %d unhandled\n", (int)event);
+                    std::cout << "Event " << (int)event << " unhandled" << std::endl;
             }
         }
 
@@ -408,8 +485,21 @@ class SessionDelegate : public ST::CaptureSessionDelegate {
                     }
                     break;
                 case ST::CaptureSessionSample::Type::AccelerometerEvent:
+                    if (!combined_imu) {
+                        publishIMUAccel(sample.accelerometerEvent);
+                    } else {
+                        if (new_gyro_data) {
+                            publishIMUCombined(sample.accelerometerEvent, gyro_last_event);
+                        }
+                    }
                     break;
                 case ST::CaptureSessionSample::Type::GyroscopeEvent:
+                    if (!combined_imu) {
+                        publishIMUGyro(sample.gyroscopeEvent);
+                    } else {
+                        gyro_last_event = sample.gyroscopeEvent;
+                        new_gyro_data = true;
+                    }
                     break;
                 default:
                     printf("Sample type %d unhandled\n", (int)sample.type);
@@ -463,19 +553,19 @@ int main(int argc, char **argv) {
     /** @brief Set to true to enable frame synchronization between visible or color and depth. */
     settings.frameSyncEnabled = true;
     /** @brief Set to true to deliver IMU events on a separate, dedicated background thread. Only supported for Structure Core, currently. */
-    settings.lowLatencyIMU = true;
+    settings.lowLatencyIMU = false;
     /** @brief Set to true to apply a correction filter to the depth before streaming. This may effect performance. */
     settings.applyExpensiveCorrection = true;
     /** @brief Set to true to enable depth streaming. */
     settings.structureCore.depthEnabled = true;
     /** @brief Set to true to enable infrared streaming. */
-    settings.structureCore.infraredEnabled = true;
+    settings.structureCore.infraredEnabled = false;
     /** @brief Set to true to enable visible streaming. */
     settings.structureCore.visibleEnabled = true;
     /** @brief Set to true to enable accelerometer streaming. */
-    settings.structureCore.accelerometerEnabled = false;
+    settings.structureCore.accelerometerEnabled = true;
     /** @brief Set to true to enable gyroscope streaming. */
-    settings.structureCore.gyroscopeEnabled = false;
+    settings.structureCore.gyroscopeEnabled = true;
     /** @brief The target resolution for streamed depth frames. @see StructureCoreDepthResolution */
     settings.structureCore.depthResolution = ST::StructureCoreDepthResolution::_640x480;
     /** @brief The preset depth range mode for streamed depth frames. Modifies the min/max range of the depth values. */
@@ -497,15 +587,15 @@ int main(int argc, char **argv) {
     /** @brief The target stream rate for IMU data. (gyro and accel) */
     settings.structureCore.imuUpdateRate = ST::StructureCoreIMUUpdateRate::Default;
     /** @brief Serial number of sensor to stream. If null, the first connected sensor will be used. */
-    settings.structureCore.sensorSerial = serial_c;
+    // settings.structureCore.sensorSerial = serial_c;
     /** @brief Maximum amount of time (in milliseconds) to wait for a sensor to connect before throwing a timeout error. */
     settings.structureCore.sensorInitializationTimeout = 6000;
     /** @brief The target framerate for the infrared camera. If the value is not supported, the default is 30. */
     settings.structureCore.infraredFramerate = 15.f;
     /** @brief The target framerate for the depth sensor. If the value is not supported, the default is 30. */
-    settings.structureCore.depthFramerate    = 15.f;
+    settings.structureCore.depthFramerate    = 30.f;
     /** @brief The target framerate for the visible camera. If the value is not supported, the default is 30. */
-    settings.structureCore.visibleFramerate  = 15.f;
+    settings.structureCore.visibleFramerate  = 30.f;
     /** @brief The initial visible exposure to start streaming with (milliseconds, but set in seconds). */
     //settings.structureCore.initialVisibleExposure = 0.033f;
     /** @brief The initial visible gain to start streaming with. Can be any number between 1 and 8. */
@@ -515,44 +605,47 @@ int main(int argc, char **argv) {
     /** @brief The initial infrared gain to start streaming with. Can be 0, 1, 2, or 3. */
     settings.structureCore.initialInfraredGain = 3;
     /** @brief Setting this to true will eliminate saturation issues, but might result in sparser depth. */
-    settings.structureCore.disableInfraredIntensityBalance = true;
+    // settings.structureCore.disableInfraredIntensityBalance = true;
     /** @brief Setting this to true will reduce latency, but might drop more frame */
     settings.structureCore.latencyReducerEnabled = false;
     /** @brief Laser projector power setting from 0.0 to 1.0 inclusive. Projector will only activate if required by streaming configuration. */
-    settings.structureCore.initialProjectorPower = 1.0f;
+    // settings.structureCore.initialProjectorPower = 1.0f;
 
     SessionDelegate delegate(n, pnh, camera_name);
     ST::CaptureSession session;
     session.setDelegate(&delegate);
     if (!session.startMonitoring(settings)) {
-        printf("Failed to initialize capture session\n");
+        std::cout << "Failed to initialize capture session" << std::endl;
         return 1;
     }
 
-    printf("Waiting for session to become ready...\n");
+    std::cout << "Waiting for session to become ready..." << std::endl;
     delegate.waitUntilReady();
     session.startStreaming();
+
+    auto info = session.sensorInfo();
+    std::cout << "Connected Sensor SN: " << info.serialNumber << "\n";
 
     while(ros::ok())
     {
         if (delegate.getRebootFlag())
         {
-            if (delegate.getProjectFlag())
-            {
-                settings.structureCore.initialProjectorPower = 1.0f;
-            }
-            else
-            {
-                settings.structureCore.initialProjectorPower = 0.0f;
-            }
+            // if (delegate.getProjectFlag())
+            // {
+            //     settings.structureCore.initialProjectorPower = 1.0f;
+            // }
+            // else
+            // {
+            //     settings.structureCore.initialProjectorPower = 0.0f;
+            // }
             delegate.resetRebootFlag();
             session.stopStreaming();
             if (!session.startMonitoring(settings)) {
-                printf("Failed to initialize capture session\n");
+                std::cout << "Failed to initialize capture session" << std::endl;
                 return 1;
             }
 
-            printf("Waiting for session to become ready...\n");
+            std::cout << "Waiting for session to become ready..." << std::endl;
             delegate.waitUntilReady();
             session.startStreaming();
         }
