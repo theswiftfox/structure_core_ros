@@ -63,7 +63,7 @@ class SessionDelegate : public ST::CaptureSessionDelegate {
             sensor_msgs::ImagePtr msg(new sensor_msgs::Image);
 
             msg->header.frame_id = frame_id;
-            msg->header.stamp = ros::Time::now();
+            msg->header.stamp.fromSec(f.timestamp()); 
 
             msg->encoding = "16UC1";
             msg->height = f.height();
@@ -92,7 +92,7 @@ class SessionDelegate : public ST::CaptureSessionDelegate {
         {
           sensor_msgs::CameraInfoPtr info(new sensor_msgs::CameraInfo);
           info->header.frame_id = frame_id;
-          info->header.stamp = ros::Time::now();
+          info->header.stamp.fromSec(f.timestamp()); 
           info->height = f.intrinsics().height;
           info->width = f.intrinsics().width/width_scale;
           info->distortion_model = "plumb_bob";
@@ -115,7 +115,7 @@ class SessionDelegate : public ST::CaptureSessionDelegate {
             sensor_msgs::ImagePtr msg(new sensor_msgs::Image);
 
             msg->header.frame_id = frame_id;
-            msg->header.stamp = ros::Time::now();
+            msg->header.stamp.fromSec(f.timestamp()); //= ros::Time::now();
 
             int num_channels = f.rgbSize()/(f.width()*f.height());
 
@@ -143,7 +143,7 @@ class SessionDelegate : public ST::CaptureSessionDelegate {
 
             sensor_msgs::ImagePtr right(new sensor_msgs::Image);
             right->header.frame_id = right_frame_id;
-            right->header.stamp = ros::Time::now();
+            right->header.stamp.fromSec(f.timestamp()); 
 
             right->encoding = "mono16";
             right->height = f.height();
@@ -155,7 +155,7 @@ class SessionDelegate : public ST::CaptureSessionDelegate {
 
             sensor_msgs::ImagePtr left(new sensor_msgs::Image);
             left->header.frame_id = left_frame_id;
-            left->header.stamp = ros::Time::now();
+            left->header.stamp.fromSec(f.timestamp()); 
 
             left->encoding = "mono16";
             left->height = f.height();
@@ -276,7 +276,7 @@ class SessionDelegate : public ST::CaptureSessionDelegate {
 
             sensor_msgs::ImagePtr msg(new sensor_msgs::Image);
             msg->header.frame_id = camera_name + "_rgb_optical_frame";
-            msg->header.stamp = ros::Time::now();
+            msg->header.stamp.fromSec(visual.timestamp()); 
             msg->encoding = "16UC1";
             msg->height = visual.height();
             msg->width = visual.width();
@@ -301,7 +301,7 @@ class SessionDelegate : public ST::CaptureSessionDelegate {
 
             sensor_msgs::ImagePtr msg(new sensor_msgs::Image);
             msg->header.frame_id = camera_name + "_depth_optical_frame";
-            msg->header.stamp = ros::Time::now();
+            msg->header.stamp.fromSec(ir.timestamp()); 
             msg->encoding = "16UC1";
             msg->height = ir.height();
             msg->width = ir.width()/2;
@@ -324,7 +324,7 @@ class SessionDelegate : public ST::CaptureSessionDelegate {
             }
             sensor_msgs::ImagePtr msg(new sensor_msgs::Image);
             msg->header.frame_id = camera_name + "_rgb_optical_frame";
-            msg->header.stamp = ros::Time::now();
+            msg->header.stamp.fromSec(visual.timestamp()); 
             msg->encoding = "mono16";
             msg->height = visual.height();
             msg->width = visual.width();
@@ -463,7 +463,8 @@ class SessionDelegate : public ST::CaptureSessionDelegate {
                     break;
                 case ST::CaptureSessionSample::Type::VisibleFrame:
                     //printf("Visible frame: size %dx%d\n", sample.visibleFrame.width(), sample.visibleFrame.height());
-                    publishVisibleFrame(sample.visibleFrame);
+                    // todo: seperate pub for undistorted
+                    publishVisibleFrame(sample.visibleFrame.undistorted());
                     break;
                 case ST::CaptureSessionSample::Type::InfraredFrame:
                     //printf("Infrared frame: size %dx%d\n", sample.infraredFrame.width(), sample.infraredFrame.height());
@@ -473,11 +474,11 @@ class SessionDelegate : public ST::CaptureSessionDelegate {
                     {
                         publishDepthFrame(sample.depthFrame);
 
-                        publishVisibleFrame(sample.visibleFrame);
+                        publishVisibleFrame(sample.visibleFrame.undistorted());
 
 //                        publishInfraredFrame(sample.infraredFrame, true);
 
-                        publishDepthAligned(sample.depthFrame, sample.visibleFrame);
+                        publishDepthAligned(sample.depthFrame, sample.visibleFrame.undistorted());
 
 //                        publishDepthIRAligned(sample.depthFrame, sample.infraredFrame);
 
@@ -579,7 +580,7 @@ int main(int argc, char **argv) {
     */
     settings.structureCore.visibleResolution = ST::StructureCoreVisibleResolution::Default;
     /** @brief Set to true to apply gamma correction to incoming visible frames. */
-    settings.structureCore.visibleApplyGammaCorrection = true;
+    settings.structureCore.visibleApplyGammaCorrection = false;
     /** @brief Enable auto-exposure for infrared frames. */
     settings.structureCore.infraredAutoExposureEnabled = true;
     /** @brief Specifies how to stream the infrared frames. @see StructureCoreInfraredMode */
@@ -597,9 +598,9 @@ int main(int argc, char **argv) {
     /** @brief The target framerate for the visible camera. If the value is not supported, the default is 30. */
     settings.structureCore.visibleFramerate  = 30.f;
     /** @brief The initial visible exposure to start streaming with (milliseconds, but set in seconds). */
-    //settings.structureCore.initialVisibleExposure = 0.033f;
+    settings.structureCore.initialVisibleExposure = 0.006f;
     /** @brief The initial visible gain to start streaming with. Can be any number between 1 and 8. */
-    //settings.structureCore.initialVisibleGain = 4.0f;
+    settings.structureCore.initialVisibleGain = 1.0f;
     /** @brief The initial infrared exposure to start streaming with. */
     settings.structureCore.initialInfraredExposure = 0.0146f;
     /** @brief The initial infrared gain to start streaming with. Can be 0, 1, 2, or 3. */
